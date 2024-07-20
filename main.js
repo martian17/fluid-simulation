@@ -1,6 +1,7 @@
 import { getCurl, getDiversionMatrix, getComplexPressureMatrix } from "./src/curl.js";
 import { getBuffer64, freeBuffer64 } from "./src/buffer.js";
 import { toColor } from "./src/color.js";
+import { wing } from "./assets.js";
 
 
 const canvas = document.createElement("canvas");
@@ -11,61 +12,6 @@ const squash = function(val,max){
     return (-2*max)/(1+Math.E**(2/max*val))+max;
 }
 
-const renderHeatmap = function(vmap, width, height){
-    const pressure = getComplexPressureMatrix(vmap,width,height);
-    const rv = 0.6;
-    canvas.width = 500;
-    canvas.height = 500*height/width;
-    const imgdata = ctx.getImageData(0,0,width,height);
-    const data = imgdata.data;
-    for(let i = 0; i < height; i++){
-        for(let j = 0; j < width; j++){
-            const idx = i*width+j;
-            //const [r,g,b,a] = toColor((squash(pressure[idx*2],1)+1)/2);
-            const vx = vmap[idx*2+0]-rv;
-            const vy = vmap[idx*2+1];
-            const ang = Math.atan2(vy,vx);
-            const rad = Math.sqrt(vx*vx+vy*vy);
-            const r = (0.5+Math.sin(ang))*squash(rad,rv)*256;
-            const g = (0.5+Math.sin(ang+Math.PI*2/3))*squash(rad,rv)*256;
-            const b = (0.5+Math.sin(ang+Math.PI*4/3))*squash(rad,rv)*256;
-
-
-            //const [r,g,b,a] = toColor(squash(vmap[idx*2],1));
-            //if(idx < rv)console.log(pressure[idx*2],r,g,b,a,idx);
-            data[idx*4+0] = r;
-            data[idx*4+1] = g;
-            data[idx*4+2] = b;
-            data[idx*4+3] = 255//a;
-        }
-    }
-    freeBuffer64(pressure);
-    ctx.putImageData(imgdata,0,0);
-};
-
-const displayVectorField = function(vmap, width, height, spacing = 10, arrowLength = 9, maxMagnitude = 1){
-    canvas.width = 500;
-    canvas.height = 500*height/width;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    for(let sx = 0; sx < canvas.width; sx+=spacing){
-        for(let sy = 0; sy < canvas.height; sy+=spacing){
-            const x = Math.floor(sx/canvas.width*width);
-            const y = Math.floor(sy/canvas.height*height);
-            const idx = (y*width+x)*2;
-            const vx = vmap[idx+0];
-            const vy = vmap[idx+1];
-            const magn = Math.sqrt(vx*vx+vy*vy);
-            const q = squash(magn,maxMagnitude)/maxMagnitude*arrowLength;
-
-            const sx1 = sx+q*vx/magn;
-            const sy1 = sy+q*vy/magn;
-            ctx.beginPath();
-            ctx.moveTo(sx, sy);
-            ctx.lineTo(sx1, sy1);
-            ctx.stroke()
-        }
-    }
-}
 
 const stepVelocityField = function(vmap, width, height){
     const vmap1 = getBuffer64(vmap.length);
@@ -108,76 +54,6 @@ const stepVelocityField = function(vmap, width, height){
     return vmap;
 };
 
-const wing = await new Promise(res=>{
-    const img = new Image();
-    const canvas = document.createElement("canvas");
-    img.src = "./plane-wing.png";
-    img.addEventListener("load",()=>{
-        console.log("asdf");
-        const width = canvas.width = img.width;
-        const height = canvas.height = img.height;
-        const ctx = canvas.getContext("2d");
-        ctx.drawImage(img,0,0);
-        const imgdata = ctx.getImageData(0,0,width, height);
-        // trim the image data
-        const data = imgdata.data;
-        console.log(data);
-        let y0 = 0;
-        outer1:
-        for(; y0 < height; y0++){
-            for(let j = 0; j < width; j++){
-                const idx = (y0*width+j)*4;
-                if(data[idx] < 100)break outer1;
-            }
-        }
-        let y1 = height-1;
-        outer2:
-        for(; y1 >= y0; y1--){
-            for(let j = 0; j < width; j++){
-                const idx = (y0*width+j)*4;
-                if(data[idx] < 100){
-                    y1++;
-                    break outer2;
-                }
-            }
-        }
-        let x0 = 0;
-        outer3:
-        for(; x0 < width; x0++){
-            for(let i = 0; i < height; i++){
-                const idx = (i*width+x0)*4;
-                if(data[idx] < 100)break outer3;
-            }
-        }
-        let x1 = width-1;
-        outer4:
-        for(; x1 >= x0; x1--){
-            for(let i = 0; i < height; i++){
-                const idx = (i*width+x1)*4;
-                if(data[idx] < 100){
-                    x1--;
-                    break outer4;
-                }
-            }
-        }
-        const w = x1-x0;
-        const h = y1-y0
-        const buff = new Uint8Array(w*h);
-        for(let i = 0; i < h; i++){
-            for(let j = 0; j < w; j++){
-                const y = i+y0;
-                const x = j+x0;
-                buff[i*w+j] = data[(y*width+x)*4] < 100 ? 0 : 1;
-            }
-        }
-        res({buff, w, h});
-    });
-});
-
-
-console.log(wing);
-
-
 {
     const width = 512;
     const height = 512;
@@ -190,33 +66,36 @@ console.log(wing);
             vmap[idx+1] = 0;
         }
     }
-    // for(let y = 257; y < 512; y++){
-    //     for(let x = 0; x < 512; x++){
-    //         const idx = (y*width+x)*2;
-    //         vmap[idx+0] = -airSpeed;
-    //         vmap[idx+1] = 0;
-    //     }
-    // }
     vmap[(257*width+200)*2+0] = 0;
+    // density map
+    const dmap = new Float64Array(width*height*2);// density map
+    for(let y = 0; y < height; y++){
+        for(let x = 0; x < width; x++){
+            const idx = (y*width+x)*2;
+            vmap[idx+0] = 0;
+            vmap[idx+0] = 0;
+        }
+    }
+    
+
     //console.log(vmap);
     for(let i = 0;;i++){
         await new Promise(res=>setTimeout(res,20));
+        // set borders
+        const borderWidth = 50;
+        for(let y = 0; y < height; y++){
+            for(let x = 0; x < width; x++){
+                if(y > borderWidth && y < height-borderWidth && x > borderWidth && x < width-borderWidth){
+                    x += width-borderWidth*2;
+                    continue;
+                }
+                const idx = (y*width+x)*2;
+                vmap[idx+0] = 0;
+                vmap[idx+0] = 0;
+            }
+        }
 
         getCurl(vmap,width,height);
-        // for(let y = 100; y < 101; y++){
-        //     for(let x = 0; x < 510; x++){
-        //         const idx = (y*width+x)*2;
-        //         vmap[idx+0] = airSpeed;
-        //         vmap[idx+1] = 0;
-        //     }
-        // }
-        // for(let y = 400; y < 401; y++){
-        //     for(let x = 0; x < 510; x++){
-        //         const idx = (y*width+x)*2;
-        //         vmap[idx+0] = airSpeed;
-        //         vmap[idx+1] = 0;
-        //     }
-        // }
         for(let y = 0; y < height; y++){
             for(let x = 0; x < 50; x++){
                 const idx = (y*width+x)*2;
@@ -224,13 +103,6 @@ console.log(wing);
                 vmap[idx+1] = 0;
             }
         }
-        // for(let y = 230; y < 270; y++){
-        //     for(let x = 130; x < 170; x++){
-        //         const idx = (y*width+x)*2;
-        //         vmap[idx+0] = 0;
-        //         vmap[idx+1] = 0;
-        //     }
-        // }
         console.log(i);
         // run twice to get the stable result
         //getCurl(vmap,width,height);
@@ -245,13 +117,6 @@ console.log(wing);
                     vmap[idx+1] *= wing.buff[widx];
                 }
             }
-            // for(let y = 230; y < 270; y++){
-            //     for(let x = 130; x < 170; x++){
-            //         const idx = (y*width+x)*2;
-            //         vmap[idx+0] = 0;
-            //         vmap[idx+1] = 0;
-            //     }
-            // }
         }
         //displayVectorField(vmap/*getDiversionMatrix(width,height)*/,width,height, 2, 5, 10);
         renderHeatmap(vmap,width,height);
