@@ -1,5 +1,6 @@
-import { getCurl, getDiversionMatrix } from "./src/curl.js";
+import { getCurl, getDiversionMatrix, getComplexPressureMatrix } from "./src/curl.js";
 import { getBuffer64, freeBuffer64 } from "./src/buffer.js";
+import { toColor } from "./src/color.js";
 
 
 const canvas = document.createElement("canvas");
@@ -10,6 +11,37 @@ const squash = function(val,max){
     return (-2*max)/(1+Math.E**(2/max*val))+max;
 }
 
+const renderHeatmap = function(vmap, width, height){
+    const pressure = getComplexPressureMatrix(vmap,width,height);
+    const rv = 0.6;
+    canvas.width = 500;
+    canvas.height = 500*height/width;
+    const imgdata = ctx.getImageData(0,0,width,height);
+    const data = imgdata.data;
+    for(let i = 0; i < height; i++){
+        for(let j = 0; j < width; j++){
+            const idx = i*width+j;
+            //const [r,g,b,a] = toColor((squash(pressure[idx*2],1)+1)/2);
+            const vx = vmap[idx*2+0]-rv;
+            const vy = vmap[idx*2+1];
+            const ang = Math.atan2(vy,vx);
+            const rad = Math.sqrt(vx*vx+vy*vy);
+            const r = (0.5+Math.sin(ang))*squash(rad,rv)*256;
+            const g = (0.5+Math.sin(ang+Math.PI*2/3))*squash(rad,rv)*256;
+            const b = (0.5+Math.sin(ang+Math.PI*4/3))*squash(rad,rv)*256;
+
+
+            //const [r,g,b,a] = toColor(squash(vmap[idx*2],1));
+            //if(idx < rv)console.log(pressure[idx*2],r,g,b,a,idx);
+            data[idx*4+0] = r;
+            data[idx*4+1] = g;
+            data[idx*4+2] = b;
+            data[idx*4+3] = 255//a;
+        }
+    }
+    freeBuffer64(pressure);
+    ctx.putImageData(imgdata,0,0);
+};
 
 const displayVectorField = function(vmap, width, height, spacing = 10, arrowLength = 9, maxMagnitude = 1){
     canvas.width = 500;
@@ -171,21 +203,21 @@ console.log(wing);
         await new Promise(res=>setTimeout(res,20));
 
         getCurl(vmap,width,height);
-        for(let y = 100; y < 101; y++){
-            for(let x = 0; x < 510; x++){
-                const idx = (y*width+x)*2;
-                vmap[idx+0] = airSpeed;
-                vmap[idx+1] = 0;
-            }
-        }
-        for(let y = 400; y < 401; y++){
-            for(let x = 0; x < 510; x++){
-                const idx = (y*width+x)*2;
-                vmap[idx+0] = airSpeed;
-                vmap[idx+1] = 0;
-            }
-        }
-        for(let y = 100; y < 400; y++){
+        // for(let y = 100; y < 101; y++){
+        //     for(let x = 0; x < 510; x++){
+        //         const idx = (y*width+x)*2;
+        //         vmap[idx+0] = airSpeed;
+        //         vmap[idx+1] = 0;
+        //     }
+        // }
+        // for(let y = 400; y < 401; y++){
+        //     for(let x = 0; x < 510; x++){
+        //         const idx = (y*width+x)*2;
+        //         vmap[idx+0] = airSpeed;
+        //         vmap[idx+1] = 0;
+        //     }
+        // }
+        for(let y = 0; y < height; y++){
             for(let x = 0; x < 50; x++){
                 const idx = (y*width+x)*2;
                 vmap[idx+0] = airSpeed;
@@ -221,7 +253,8 @@ console.log(wing);
             //     }
             // }
         }
-        displayVectorField(vmap/*getDiversionMatrix(width,height)*/,width,height, 2, 5, 1);
+        //displayVectorField(vmap/*getDiversionMatrix(width,height)*/,width,height, 2, 5, 10);
+        renderHeatmap(vmap,width,height);
         stepVelocityField(vmap, width, height);
     }
 }

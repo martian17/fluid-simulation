@@ -1,8 +1,7 @@
 import {getBuffer64, freeBuffer64} from "./buffer.js";
 import {convolve2d64InPlace} from "./convolution.js";
 
-
-const getComplexPressureMatrix = function(vmap, width, height){
+export const getComplexPressureMatrix = function(vmap, width, height){
     // vmap: Float64Array[x y :]
     const pmap = getBuffer64(width*height*2);
     for(let y = 0; y < height; y++){
